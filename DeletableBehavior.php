@@ -9,26 +9,29 @@
  *     return array(
  *         'deletable' => array(
  *             'class' => 'path.to.DeletableBehavior',
- *             'relatives' => array(
- *                  'Comment' => 'user_id',
- *                  'Post'    => 'creator_id',
+ *             'relations' => array(
+ *                  'comments' => DeletableBehavior::RESTRICT,
+ *                  'likes'    => DeletableBehavior::CASCADE,
  *              ),
  *         )
  *     );
  * }
  *
- * ModelName::model()->batchDelete(array(1,2,3,4));
+ * User::model()->batchDelete(array(1,2,3,4));
  *
  * @author Vorotilov Vadim <fant.geass@gmail.com>
  */
 class DeletableBehavior extends CActiveRecordBehavior
 {
+	const CASCADE = 'cascade';
+	const RESTRICT = 'restrict';
+
 	/**
 	 * Example:
-	 * array('Comment' => 'user_id', 'Post' => 'creator_id')
+	 * array(comments' => DeletableBehavior::RESTRICT, 'likes'    => DeletableBehavior::CASCADE,)
 	 * @var array
 	 */
-	public $relatives = array();
+	public $relations = array();
 
 	/**
 	 * Default handlers flag
@@ -41,7 +44,6 @@ class DeletableBehavior extends CActiveRecordBehavior
 	 * @var array
 	 */
 	protected $_batchIds = array();
-
 
 	/**
 	 * @return array
@@ -129,10 +131,18 @@ class DeletableBehavior extends CActiveRecordBehavior
 	 */
 	public function batchDeleteRelatives($ids)
 	{
-		foreach ($this->relatives as $modelName => $attribute) {
+		foreach ($this->relations as $relation => $type) {
+			$rels = $this->owner->relations();
+			$modelName = $rels[$relation][1];
+			$attribute = $rels[$relation][2];
+
 			$relativesIds = $this->getRelativesIds($ids, $modelName, $attribute);
 
-			$modelName::model()->batchDelete($relativesIds);
+			if (!empty($relativesIds) && $type == self::RESTRICT) {
+				throw new RestrictException("Can not delete because of restrict \"$modelName\" data");
+			}
+
+			$modelName::model()->batchDelete($relativesIds, true, false);
 		}
 	}
 
@@ -142,26 +152,47 @@ class DeletableBehavior extends CActiveRecordBehavior
 	 *
 	 * @param array $ids models primary keys for deleting
 	 * @param bool $deleteRelatives delete or not relatives
+	 * @param bool $first need this param for control transaction
 	 *
 	 * @return int numbers of rows that deleted.
 	 */
-	public function batchDelete(array $ids, $deleteRelatives = true)
+	public function batchDelete(array $ids, $deleteRelatives = true, $first = true)
 	{
-		$this->_batchIds = $ids;
-		$this->_addDefaultHandlers();
+		$db = $this->owner->getDbConnection();
+		if ($db->getCurrentTransaction() === null) {
+			$transaction = $db->beginTransaction();
+		}
 
-		if ($this->beforeBatchDelete()) {
+		try {
 
-			if ($deleteRelatives) {
-				$this->batchDeleteRelatives($ids);
+			$this->_batchIds = $ids;
+			$this->_addDefaultHandlers();
+
+			if ($this->beforeBatchDelete()) {
+
+				if ($deleteRelatives) {
+					$this->batchDeleteRelatives($ids);
+				}
+
+				$result = $this->owner->deleteAllByAttributes($this->_convertIdsForDeleteMethod($ids));
+
+				$this->afterBatchDelete();
+
+				if ($first && isset($transaction)) {
+					$transaction->commit();
+				}
+
+				return $result;
 			}
 
-			$result = $this->owner->deleteAllByAttributes($this->_convertIdsForDeleteMethod($ids));
+		} catch(Exception $e) {
+			if(isset($transaction)) {
+				$transaction->rollBack();
+			}
 
-			$this->afterBatchDelete();
-
-			return $result;
+			throw $e;
 		}
+
 
 		return false;
 	}
@@ -257,3 +288,11 @@ class DeletableBehavior extends CActiveRecordBehavior
 
 
 }
+
+/**
+ * RestrictException class
+ *
+ * If type is RESTRICT and relatives exists, then throw this exception
+ *
+ */
+class RestrictException extends CException {}
