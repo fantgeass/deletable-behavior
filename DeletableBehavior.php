@@ -67,6 +67,7 @@ class DeletableBehavior extends CActiveRecordBehavior
 	/**
 	 * Before Batch Delete Handler
 	 * @param CModelEvent $event
+	 * @return bool
 	 */
 	public function beforeBatchDeleteHandler(CModelEvent $event)
 	{
@@ -106,6 +107,9 @@ class DeletableBehavior extends CActiveRecordBehavior
 		$model = $modelName::model();
 		$pkAttr = $model->tableSchema->primaryKey;
 
+		if(is_array($attribute))
+			$attribute = $attribute[0];
+
 		if (is_array($pkAttr)) {
 			$r =  Yii::app()->db->createCommand()
 				->select($pkAttr)
@@ -128,6 +132,7 @@ class DeletableBehavior extends CActiveRecordBehavior
 	 * Delete relatives of models
 	 *
 	 * @param array $ids primary keys of models
+	 * @throws RestrictException
 	 */
 	public function batchDeleteRelatives($ids)
 	{
@@ -154,6 +159,7 @@ class DeletableBehavior extends CActiveRecordBehavior
 	 * @param bool $deleteRelatives delete or not relatives
 	 * @param bool $first need this param for control transaction
 	 *
+	 * @throws Exception
 	 * @return int numbers of rows that deleted.
 	 */
 	public function batchDelete(array $ids, $deleteRelatives = true, $first = true)
