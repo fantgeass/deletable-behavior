@@ -67,6 +67,7 @@ class DeletableBehavior extends CActiveRecordBehavior
 	/**
 	 * Before Batch Delete Handler
 	 * @param CModelEvent $event
+	 * @return bool
 	 */
 	public function beforeBatchDeleteHandler(CModelEvent $event)
 	{
@@ -128,15 +129,36 @@ class DeletableBehavior extends CActiveRecordBehavior
 	 * Delete relatives of models
 	 *
 	 * @param array $ids primary keys of models
+	 * @throws RestrictException
 	 */
 	public function batchDeleteRelatives($ids)
 	{
 		foreach ($this->relations as $relation => $type) {
 			$rels = $this->owner->relations();
-			$modelName = $rels[$relation][1];
-			$attribute = $rels[$relation][2];
 
-			$relativesIds = $this->getRelativesIds($ids, $modelName, $attribute);
+			$relationConfig = $rels[$relation];
+
+			$modelName = $relationConfig[1];
+
+			if(isset($relationConfig['through'])){
+				$throughLinkRelation = $rels[$relationConfig['through']];
+				$copy = array_keys($throughLinkRelation[2]);
+				$linkKey = array_shift($copy);
+				$copy = array_keys($relationConfig[2]);
+				$relatedKey = array_shift($copy);
+				$linkIds = $this->getRelativesIds($ids, $throughLinkRelation[1], $linkKey);
+				$relativesIds = array();
+				foreach ($linkIds as $id) {
+					$relativesIds[] = is_array($id) ? $id[$relatedKey] : $id;
+				}
+
+			}else{
+				$attribute = $relationConfig[2];
+				if(is_array($attribute)){
+					$attribute = array_shift($attribute);
+				}
+				$relativesIds = $this->getRelativesIds($ids, $modelName, $attribute);
+			}
 
 			if (!empty($relativesIds) && $type == self::RESTRICT) {
 				throw new RestrictException("Can not delete because of restrict \"$modelName\" data");
@@ -150,10 +172,11 @@ class DeletableBehavior extends CActiveRecordBehavior
 	/**
 	 * Delete models & relatives
 	 *
-	 * @param array $ids models primary keys for deleting
-	 * @param bool $deleteRelatives delete or not relatives
-	 * @param bool $first need this param for control transaction
+	 * @param array $ids             models primary keys for deleting
+	 * @param bool  $deleteRelatives delete or not relatives
+	 * @param bool  $first           need this param for control transaction
 	 *
+	 * @throws Exception
 	 * @return int numbers of rows that deleted.
 	 */
 	public function batchDelete(array $ids, $deleteRelatives = true, $first = true)
