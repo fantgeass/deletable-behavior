@@ -53,7 +53,7 @@ class DeletableBehavior extends CActiveRecordBehavior
 	/**
 	 * @var CDbTransaction
 	 */
-	protected $transaction;
+	protected static $transaction;
 
 	/**
 	 * @return array
@@ -97,8 +97,8 @@ class DeletableBehavior extends CActiveRecordBehavior
 	public function beforeDelete($event)
 	{
 		$this->batchDeleteRelatives(array($this->owner->primaryKey));
-		if ($this->useTransaction && !is_null($this->transaction)) {
-			$this->transaction->commit();
+		if ($this->useTransaction && !is_null(self::$transaction)) {
+			self::$transaction->commit();
 		}
 	}
 
@@ -196,8 +196,8 @@ class DeletableBehavior extends CActiveRecordBehavior
 		$db = $this->owner->getDbConnection();
 
 		if ($this->useTransaction && ($db->getCurrentTransaction() === null)) {
-			if (is_null($this->transaction)){
-				$this->transaction = $db->beginTransaction();
+			if (is_null(self::$transaction)){
+				self::$transaction = $db->beginTransaction();
 			}
 		}
 
