@@ -34,6 +34,12 @@ class DeletableBehavior extends CActiveRecordBehavior
 	public $relations = array();
 
 	/**
+	 * Whether to use existing or start new transaction on batch delete.
+	 * @var bool
+	 */
+	public $useTransaction = true;
+
+	/**
 	 * Default handlers flag
 	 * @var bool
 	 */
@@ -44,6 +50,10 @@ class DeletableBehavior extends CActiveRecordBehavior
 	 * @var array
 	 */
 	protected $_batchIds = array();
+	/**
+	 * @var CDbTransaction
+	 */
+	protected $transaction;
 
 	/**
 	 * @return array
@@ -87,6 +97,9 @@ class DeletableBehavior extends CActiveRecordBehavior
 	public function beforeDelete($event)
 	{
 		$this->batchDeleteRelatives(array($this->owner->primaryKey));
+		if ($this->useTransaction && !is_null($this->transaction)) {
+			$this->transaction->commit();
+		}
 	}
 
 
@@ -164,26 +177,28 @@ class DeletableBehavior extends CActiveRecordBehavior
 				throw new RestrictException("Can not delete because of restrict \"$modelName\" data");
 			}
 
-			$modelName::model()->batchDelete($relativesIds, true, false);
+			$modelName::model()->batchDelete($relativesIds, true);
 		}
 	}
-
 
 	/**
 	 * Delete models & relatives
 	 *
 	 * @param array $ids             models primary keys for deleting
 	 * @param bool  $deleteRelatives delete or not relatives
-	 * @param bool  $first           need this param for control transaction
 	 *
 	 * @throws Exception
+	 *
 	 * @return int numbers of rows that deleted.
 	 */
-	public function batchDelete(array $ids, $deleteRelatives = true, $first = true)
+	public function batchDelete(array $ids, $deleteRelatives = true)
 	{
 		$db = $this->owner->getDbConnection();
-		if ($db->getCurrentTransaction() === null) {
-			$transaction = $db->beginTransaction();
+
+		if ($this->useTransaction && ($db->getCurrentTransaction() === null)) {
+			if (is_null($this->transaction)){
+				$this->transaction = $db->beginTransaction();
+			}
 		}
 
 		try {
@@ -201,16 +216,12 @@ class DeletableBehavior extends CActiveRecordBehavior
 
 				$this->afterBatchDelete();
 
-				if ($first && isset($transaction)) {
-					$transaction->commit();
-				}
-
 				return $result;
 			}
 
-		} catch(Exception $e) {
-			if(isset($transaction)) {
-				$transaction->rollBack();
+		} catch (Exception $e) {
+			if ($this->useTransaction && !is_null($db->getCurrentTransaction())) {
+				$db->getCurrentTransaction()->rollBack();
 			}
 
 			throw $e;
