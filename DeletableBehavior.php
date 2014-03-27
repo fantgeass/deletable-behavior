@@ -99,6 +99,7 @@ class DeletableBehavior extends CActiveRecordBehavior
 		$this->batchDeleteRelatives(array($this->owner->primaryKey));
 		if ($this->useTransaction && !is_null(self::$transaction)) {
 			self::$transaction->commit();
+			self::$transaction = null;
 		}
 	}
 
