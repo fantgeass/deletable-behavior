@@ -38,7 +38,12 @@ class DeletableBehavior extends CActiveRecordBehavior
 	 * @var bool
 	 */
 	public $useTransaction = true;
-
+	/**
+	 * If disabled, batch deleting will delete related records one by one,
+	 * it works much more stable in all Mysql versions.
+	 * @var bool
+	 */
+	public $batchDeleteRelativesBySingleQuery = false;
 	/**
 	 * Default handlers flag
 	 * @var bool
@@ -203,7 +208,6 @@ class DeletableBehavior extends CActiveRecordBehavior
 		}
 
 		try {
-
 			$this->_batchIds = $ids;
 			$this->_addDefaultHandlers();
 
@@ -213,7 +217,14 @@ class DeletableBehavior extends CActiveRecordBehavior
 					$this->batchDeleteRelatives($ids);
 				}
 
-				$result = $this->owner->deleteAllByAttributes($this->_convertIdsForDeleteMethod($ids));
+				if ($this->batchDeleteRelativesBySingleQuery) {
+					$result = 0;
+					foreach ($ids as $id) {
+						$result += $this->owner->deleteByPk($id);
+					}
+				} else {
+					$result = $this->owner->deleteAllByAttributes($this->_convertIdsForDeleteMethod($ids));
+				}
 
 				$this->afterBatchDelete();
 
