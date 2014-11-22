@@ -112,7 +112,7 @@ class DeletableBehavior extends CActiveRecordBehavior
 	/**
 	 * Get primary keys of relatives
 	 *
-	 * @param array $ids primary keys of models
+	 * @param array $ids primary keys of owner models
 	 * @param string $modelName model name
 	 * @param string $attribute relation attribute
 	 *
