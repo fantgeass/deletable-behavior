@@ -159,7 +159,7 @@ class DeletableBehavior extends CActiveRecordBehavior
 
 			$modelName = $relationConfig[1];
 
-			if(isset($relationConfig['through'])){
+			if (isset($relationConfig['through'])) {
 				$throughLinkRelation = $rels[$relationConfig['through']];
 				$copy = array_keys($throughLinkRelation[2]);
 				$linkKey = array_shift($copy);
@@ -171,12 +171,17 @@ class DeletableBehavior extends CActiveRecordBehavior
 					$relativesIds[] = is_array($id) ? $id[$relatedKey] : $id;
 				}
 
-			}else{
-				$attribute = $relationConfig[2];
-				if(is_array($attribute)){
-					$attribute = array_shift($attribute);
+			} else {
+				$foreignPkAttribute = $relationConfig[2];
+				if (is_array($foreignPkAttribute)) {
+					if ($relationConfig[0] == CActiveRecord::HAS_MANY) {
+						$keys = array_keys($foreignPkAttribute);
+						$foreignPkAttribute = current($keys);
+					} else {
+						$foreignPkAttribute = current($foreignPkAttribute);
+					}
 				}
-				$relativesIds = $this->getRelativesIds($ids, $modelName, $attribute);
+				$relativesIds = $this->getRelativesIds($ids, $modelName, $foreignPkAttribute);
 			}
 
 			if (!empty($relativesIds) && $type == self::RESTRICT) {
