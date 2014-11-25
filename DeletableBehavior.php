@@ -38,7 +38,12 @@ class DeletableBehavior extends CActiveRecordBehavior
 	 * @var bool
 	 */
 	public $useTransaction = true;
-
+	/**
+	 * If disabled, batch deleting will delete related records one by one,
+	 * it works much more stable in all Mysql versions.
+	 * @var bool
+	 */
+	public $batchDeleteRelativesBySingleQuery = false;
 	/**
 	 * Default handlers flag
 	 * @var bool
@@ -107,7 +112,7 @@ class DeletableBehavior extends CActiveRecordBehavior
 	/**
 	 * Get primary keys of relatives
 	 *
-	 * @param array $ids primary keys of models
+	 * @param array $ids primary keys of owner models
 	 * @param string $modelName model name
 	 * @param string $attribute relation attribute
 	 *
@@ -157,7 +162,7 @@ class DeletableBehavior extends CActiveRecordBehavior
 
 			$modelName = $relationConfig[1];
 
-			if(isset($relationConfig['through'])){
+			if (isset($relationConfig['through'])) {
 				$throughLinkRelation = $rels[$relationConfig['through']];
 				$copy = array_keys($throughLinkRelation[2]);
 				$linkKey = array_shift($copy);
@@ -169,12 +174,17 @@ class DeletableBehavior extends CActiveRecordBehavior
 					$relativesIds[] = is_array($id) ? $id[$relatedKey] : $id;
 				}
 
-			}else{
-				$attribute = $relationConfig[2];
-				if(is_array($attribute)){
-					$attribute = array_shift($attribute);
+			} else {
+				$foreignPkAttribute = $relationConfig[2];
+				if (is_array($foreignPkAttribute)) {
+					if ($relationConfig[0] == CActiveRecord::HAS_MANY) {
+						$keys = array_keys($foreignPkAttribute);
+						$foreignPkAttribute = current($keys);
+					} else {
+						$foreignPkAttribute = current($foreignPkAttribute);
+					}
 				}
-				$relativesIds = $this->getRelativesIds($ids, $modelName, $attribute);
+				$relativesIds = $this->getRelativesIds($ids, $modelName, $foreignPkAttribute);
 			}
 
 			if (!empty($relativesIds) && $type == self::RESTRICT) {
@@ -206,7 +216,6 @@ class DeletableBehavior extends CActiveRecordBehavior
 		}
 
 		try {
-
 			$this->_batchIds = $ids;
 			$this->_addDefaultHandlers();
 
@@ -216,7 +225,14 @@ class DeletableBehavior extends CActiveRecordBehavior
 					$this->batchDeleteRelatives($ids);
 				}
 
-				$result = $this->owner->deleteAllByAttributes($this->_convertIdsForDeleteMethod($ids));
+				if ($this->batchDeleteRelativesBySingleQuery) {
+					$result = 0;
+					foreach ($ids as $id) {
+						$result += $this->owner->deleteByPk($id);
+					}
+				} else {
+					$result = $this->owner->deleteAllByAttributes($this->_convertIdsForDeleteMethod($ids));
+				}
 
 				$this->afterBatchDelete();
 
